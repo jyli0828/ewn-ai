@@ -1,5 +1,5 @@
 #include "gui.h"
-#include "ewnAi.h"
+#include "ewnAI.h"
 
 using namespace std;
 

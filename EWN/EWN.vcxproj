@@ -118,17 +118,17 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpp20</LanguageStandard>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
-      <AdditionalIncludeDirectories>C:\libtorch-win-shared-with-deps-2.1.0+cpu\libtorch\include;C:\libtorch-win-shared-with-deps-2.1.0+cpu\libtorch\include\torch\csrc\api\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\libtorch\include\torch\csrc\api\include;C:\libtorch\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\libtorch-win-shared-with-deps-2.1.0+cpu\libtorch\lib</AdditionalLibraryDirectories>
-      <AdditionalDependencies>C:\libtorch-win-shared-with-deps-2.1.0+cpu\libtorch\lib\*.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\libtorch\lib</AdditionalLibraryDirectories>
+      <AdditionalDependencies>C:\libtorch\lib\*.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>

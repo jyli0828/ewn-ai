@@ -18,7 +18,7 @@ GUI::GUI() {
 
 void GUI::init_environment() {
 	IMAGE imgBG;
-	loadimage(&imgBG, _T("./picture/ewn_p1_gui.jpg"), WIDTH, HEIGHT);
+	loadimage(&imgBG, _T("./picture/gui_background.jpg"), WIDTH, HEIGHT);
 	putimage(0, 0, &imgBG);
 
 	setfillcolor(WHITE);
@@ -32,7 +32,7 @@ void GUI::init_environment() {
 
 int GUI::begin_gui() {
 	IMAGE imgBG;
-	loadimage(&imgBG, _T("./picture/ewn_p1_gui.jpg"), WIDTH, HEIGHT);
+	loadimage(&imgBG, _T("./picture/gui_background.jpg"), WIDTH, HEIGHT);
 	putimage(0, 0, &imgBG);
 
 	setbkmode(TRANSPARENT);
@@ -96,7 +96,7 @@ int GUI::begin_gui() {
 
 int GUI::select_AI() {
 	IMAGE imgBG;
-	loadimage(&imgBG, _T("./picture/ewn_p1_gui.jpg"), WIDTH, HEIGHT);
+	loadimage(&imgBG, _T("./picture/gui_background.jpg"), WIDTH, HEIGHT);
 	putimage(0, 0, &imgBG);
 
 	setbkmode(TRANSPARENT);
@@ -180,7 +180,7 @@ int GUI::select_AI() {
 
 bool GUI::select_side() {
 	IMAGE imgBG;
-	loadimage(&imgBG, _T("./picture/ewn_p1_gui.jpg"), WIDTH, HEIGHT);
+	loadimage(&imgBG, _T("./picture/gui_background.jpg"), WIDTH, HEIGHT);
 	putimage(0, 0, &imgBG);
 
 	setbkmode(TRANSPARENT);
@@ -517,7 +517,7 @@ void GUI::clock_txt(bool side, double clock_p) {
 
 void GUI::result_txt(string result) {
 	IMAGE imgBG;
-	loadimage(&imgBG, _T("./picture/ewn_p1_gui.jpg"), WIDTH, HEIGHT);
+	loadimage(&imgBG, _T("./picture/gui_background.jpg"), WIDTH, HEIGHT);
 	putimage(0, 0, &imgBG);
 
 	settextcolor(BLACK);

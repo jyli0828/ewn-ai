@@ -43,7 +43,7 @@
       <Filter>來源檔案</Filter>
     </ClCompile>
     <ClCompile Include="main.cpp">
-      <Filter>資源檔</Filter>
+      <Filter>來源檔案</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

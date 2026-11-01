@@ -3,7 +3,7 @@
 #define PLAY_H
 
 #include "game.h"
-#include "ewnAi.h"
+#include "ewnAI.h"
 
 class Play {
 private:
