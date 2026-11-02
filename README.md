@@ -1,5 +1,5 @@
 # EWN-AI
-![Starting position of a game, drawn by the game GUI](docs/images/board.png)
+<img src="docs/images/board.png" alt="Starting position of a game, drawn by the game GUI" width="280">
 
 An AI engine and GUI for **EinStein würfelt nicht** (EWN), a dice-driven abstract strategy board game. The project combines a classic **Monte Carlo Tree Search (MCTS)** engine with a **deep learning policy network** (trained on real human game records) to guide move selection, and ships with a simple Windows GUI built with EasyX.
 
@@ -9,13 +9,13 @@ EinStein würfelt nicht ("Einstein doesn't play dice") is played on a 5×5 board
 
 ## Features
 
-- **Three play modes**: Player vs. Player, Player vs. AI, and AI vs. AI
+- **Three play modes**: Player vs. Player, Player vs. AI, and AI vs. AI (500 games in a row, alternating the side that moves first, with the red side's win rate)
 - **Three AI strategies**, selectable at runtime:
   - `MCTS` — Upper Confidence Bound for Trees (UCT) with random rollouts
   - `Random` — a random-move baseline AI
   - `Model` — MCTS/UCT guided by a trained neural network's move probabilities (an AlphaZero-style policy prior)
 - **GUI** built with [EasyX](https://easyx.cn/) for board interaction and move visualization
-- **Training pipeline** that downloads top players' games from LittleGolem, turns them into training data, and trains a residual policy network in PyTorch for the game to load
+- **Training pipeline** that downloads top players' games from LittleGolem, turns them into training data, and trains a residual policy network in PyTorch, which the game then runs with its own C++ code
 
 ## Project Structure
 
@@ -31,9 +31,10 @@ EWN-AI/
 │   ├── mcts.cpp / mcts.h       # Monte Carlo Tree Search driver
 │   ├── uct.cpp / uct.h         # UCT selection logic (incl. model-guided variant)
 │   ├── tree_node.cpp / .h      # Search tree node representation
-│   ├── model.cpp               # LibTorch integration: builds the feature map and queries the policy model
+│   ├── model.cpp / model.h     # Builds the feature map and runs the policy network
 │   ├── randomAi.cpp / .h       # Random-move baseline AI
-│   ├── model_ewn.pt            # Trained policy network (TorchScript)
+│   ├── model_ewn.bin           # Trained policy network weights, read by model.cpp
+│   ├── model_ewn.json          # How that model was trained: data, settings, test results
 │   └── picture/                # GUI image assets loaded at runtime
 ├── training/                   # Policy network training pipeline (Python)
 │   ├── scrape_littlegolem.py   # Downloads the top-rated players' match records from LittleGolem
@@ -48,9 +49,13 @@ EWN-AI/
 
 ## How the AI Works
 
+### Search
+
+`MCTS::AI_move()` in `mcts.cpp` runs a separate search of 100 iterations for every legal move the rolled die allows, one thread per move, and plays the move whose search gives the highest win rate. The search tree holds the moves of every piece, so each step down the tree rolls a die to decide which of them may move, and the side to move picks the child with the best UCT value from its own point of view (`uct.cpp`). Each new node is then scored by 100 random games that also roll the die every turn.
+
 ### Board encoding
 
-Each position is encoded as a 16×5×5 feature map, built the same way by `board_to_FM()` in `EWN/model.cpp` and by the training notebook. The game queries the model once per movable piece:
+Each position is encoded as a 16×5×5 feature map, built the same way by `board_to_FM()` in `EWN/model.cpp` and by the training notebook. The game asks the model about one piece at a time, marked in channel 12:
 
 | Channel | Content |
 |---|---|
@@ -63,15 +68,15 @@ Each position is encoded as a 16×5×5 feature map, built the same way by `board
 
 ### Policy model
 
-For the marked piece, the model outputs a probability for each direction (horizontal, vertical, diagonal). `training/train_policy.ipynb` trains a small residual network and exports it with illegal directions masked out. The shipped `EWN/model_ewn.pt` was trained this way on the data below: it picks the direction the human player chose for 76.5% of the test moves, against 57.4% for always picking the most common legal direction.
+For the marked piece, the model outputs a probability for each direction (horizontal, vertical, diagonal). `training/train_policy.ipynb` trains a small residual network (6 residual blocks of 64 channels) and exports its weights to `model_ewn.bin`, with every batch norm folded into the convolution before it. `model.cpp` runs the network on the CPU without any deep learning library, using AVX2 when the CPU has it, and gives illegal directions a probability of 0. The shipped `EWN/model_ewn.bin` was trained this way on 58,127 games, from an earlier parse of the logs below that missed 231 games: it picks the direction the human player chose for 76.5% of its test moves, against 57.4% for always picking the most common legal direction. `EWN/model_ewn.json` records how it was trained.
 
 ### Guided search
 
-In `Model` mode, `uct.cpp` blends the classic UCT exploration/exploitation terms with the policy network's move probability as an additional prior, biasing the tree search toward moves the network favors while still exploring via rollouts.
+In `Model` mode, the first time the die lets a piece move from a node, that piece's moves get the policy network's probabilities (`Tree_node::set_children_probs()`, which calls `model_probs()` in `model.cpp`). Most nodes are never selected from, so the network is only asked about the nodes the search goes through. `uct.cpp` adds 10 × probability ÷ visits to the UCT value: a prior that steers the search toward the moves the network favors and fades as the rollouts add up. Its random games also always take a move into the opponent's corner when the die allows one.
 
 ### Training data
 
-`scrape_littlegolem.py` downloads the match records of the top 10 players in [LittleGolem](https://www.littlegolem.net/)'s EinStein ranking, and `parse_game_logs.py` turns them into one CSV line per game (initial setups, move list, result), dropping duplicates. The notebook then turns each game into board states to train the policy network.
+`scrape_littlegolem.py` downloads the match records of the top 10 players in [LittleGolem](https://www.littlegolem.net/)'s EinStein ranking, and `parse_game_logs.py` turns them into one CSV line per game (initial setups, move list, result), dropping duplicates. The last game of a match takes the match's result, also when a player resigned it. The notebook then turns each game into board states to train the policy network.
 
 The current training data was downloaded on 2026-11-02 from these players' finished matches:
 
@@ -93,21 +98,21 @@ A match between two listed players counts for both above. Overall, the data has 
 | | Count |
 |---|---:|
 | Matches, each counted once (338 matches without any moves are skipped) | 7,260 |
-| Games, after removing the 3,750 that appear in two players' logs | 58,127 |
-| Moves, i.e. training samples | 970,703 |
-| Training / test moves, split by game | 821,449 / 149,254 |
-| Moves per game | 16.7 on average, 2 to 32 |
+| Games, after removing the 3,768 that appear in two players' logs | 58,358 |
+| Moves, i.e. training samples | 973,197 |
+| Training / test moves, split by game | 824,562 / 148,635 |
+| Moves per game | 16.7 on average, 1 to 32 |
 
 | How the game was won | Games | Share |
 |---|---:|---:|
-| A piece reached the opponent's home corner | 53,527 | 92.1% |
-| All of the opponent's pieces were captured | 4,173 | 7.2% |
-| Neither: the opponent resigned or ran out of time | 427 | 0.7% |
+| A piece reached the opponent's home corner | 53,540 | 91.7% |
+| All of the opponent's pieces were captured | 4,174 | 7.2% |
+| Neither: the opponent resigned or ran out of time | 644 | 1.1% |
 
 | | Blue | Red |
 |---|---:|---:|
-| Games won | 29,141 (50.1%) | 28,986 (49.9%) |
-| Games started | 32,457 (55.8%) | 25,670 (44.2%) |
+| Games won | 29,248 (50.1%) | 29,110 (49.9%) |
+| Games started | 32,600 (55.9%) | 25,758 (44.1%) |
 
 The side that moved first won 52.4% of the games, and 40.9% of all moves capture a piece.
 
@@ -115,37 +120,33 @@ The side that moved first won 52.4% of the games, and 40.9% of all moves capture
 
 - **Windows** + **Visual Studio 2022 or later** with the v143 (MSVC) build tools (the project is a `.sln`/`.vcxproj` targeting Windows)
 - [**EasyX**](https://easyx.cn/) graphics library (for the GUI)
-- [**LibTorch**](https://pytorch.org/get-started/locally/) (C++ distribution of PyTorch, for loading `model_ewn.pt` in `model.cpp`). The model runs on the CPU, so the CPU build is sufficient.
-- **Python 3** with the packages in `training/requirements.txt` (for the `training/` pipeline)
+- **Python 3** for the `training/` pipeline: the scraper and the data scripts only need Python itself, the notebook needs the packages in `training/requirements.txt`
 
 ## Getting Started
 
 1. Clone the repository and open `EWN/EWN.sln` in Visual Studio.
-2. Install EasyX and LibTorch, and configure their include/lib paths in the project settings.
-3. Select the `Release | x64` configuration (the only one with LibTorch settings), then build and run. On launch, choose a game mode (Player vs. Player / Player vs. AI / AI vs. AI) and, if applicable, an AI strategy (MCTS / Random / Model).
+2. Install EasyX.
+3. Select the `Release | x64` configuration, then build and run. On launch, choose a game mode (Player vs. Player / Player vs. AI / AI vs. AI) and, if applicable, an AI strategy (MCTS / Random / Model).
+
+The build also copies `picture/` and `model_ewn.bin` into `EWN/x64/Release/`, so `EWN.exe` there runs on its own, e.g. by double-clicking it. The folder takes about 2 MB, most of it the model.
 
 ### Visual Studio Project Configuration
 
-Assuming LibTorch is extracted to `C:\libtorch`, configure the following in **Project → Properties** (apply to the relevant Configuration/Platform, e.g. `Release | x64`). LibTorch 2.13 requires C++20. `EWN.vcxproj` already includes these settings for `Release | x64`, except **Debugging → Environment**, which Visual Studio stores in the uncommitted per-user `EWN.vcxproj.user` file:
+`EWN.vcxproj` already has these settings for both `Release | x64` and `Debug | x64`:
 
-| Section | Setting | Value |
-|---|---|---|
-| Debugging → Environment | — | `PATH=C:\libtorch\lib;%PATH%` |
-| General → C++ Language Standard | — | ISO C++20 Standard (`/std:c++20`) |
-| C/C++ → General → Additional Include Directories | — | `C:\libtorch\include\torch\csrc\api\include;C:\libtorch\include` |
-| Linker → General → Additional Library Directories | — | `C:\libtorch\lib` |
-| Linker → Input → Additional Dependencies | — | `C:\libtorch\lib\*.lib;%(AdditionalDependencies)` |
+| Setting | Value |
+|---|---|
+| General → C++ Language Standard | ISO C++20 Standard (`/std:c++20`) |
+| Build Events → Post-Build Event | Copies `picture/` and `model_ewn.bin` next to `EWN.exe` |
 
-> **Note:** Set the **Debugging → Environment** PATH so the LibTorch `.dll` files (e.g. `torch.dll`, `c10.dll`) can be found at runtime when launching from Visual Studio. If running the built `.exe` outside Visual Studio, either add `C:\libtorch\lib` to your system PATH or copy the required `.dll` files next to the executable.
->
-> The game also loads `picture/gui_background.jpg` and `model_ewn.pt` relative to the working directory. Visual Studio uses the `EWN/` project folder by default; when running the `.exe` elsewhere, start it from `EWN/` or copy `picture/` and `model_ewn.pt` next to it.
+> **Note:** The game loads `picture/gui_background.jpg` and `model_ewn.bin` relative to the working directory. Visual Studio starts it in the `EWN/` project folder, and the build output folder has copies of both, so it runs from either.
 
 ## Training the Policy Network
 
-1. Install the Python packages: `pip install -r training/requirements.txt`.
+1. Install the notebook's Python packages: `pip install -r training/requirements.txt`. The scraper and the data scripts need nothing beyond Python itself.
 2. Run `python training/scrape_littlegolem.py` to download the current top 10 players' finished standard-rule matches into `training/game_logs/`. By default it sends at most one request per second, so this takes a while; `--workers 4 --delay 0.25` keeps four downloads going at once and is about four times faster. Downloaded matches are cached, so it can be stopped and run again.
 3. Run `python training/parse_game_logs.py` to turn the logs in `training/game_logs/` into `training/training_data.csv`, and `python training/data_stats.py` to print its statistics.
-4. Open `training/train_policy.ipynb` to convert the CSV into feature maps/HDF5, train the model, and export a new `model_ewn.pt`. The notebook reads and writes these files in `DATA_DIR` (set in its first cell): `/content/drive/MyDrive/EWN-AI` on Colab, otherwise the notebook's own folder. On a Colab T4 GPU, building the HDF5 file takes about 7 minutes and training about 4. The notebook also prints baseline accuracies to judge the model's accuracy by.
-5. Copy the exported `model_ewn.pt` into `EWN/`, where the game loads it.
+4. Open `training/train_policy.ipynb` to convert the CSV into feature maps/HDF5, train the model, and export a new `model_ewn.bin` with its `model_ewn.json`. The notebook reads and writes these files in `DATA_DIR` (set in its first cell): `/content/drive/MyDrive/EWN-AI` on Colab, otherwise the notebook's own folder, so on Colab first upload `training/training_data.csv` to that Google Drive folder. On a Colab T4 GPU, building the HDF5 file takes about 7 minutes and training about 4; later runs reuse the HDF5 file until the CSV changes. The notebook also prints baseline accuracies to judge the model's accuracy by.
+5. Copy the exported `model_ewn.bin` and `model_ewn.json` into `EWN/`, where the game loads the model; the next build copies the model to `EWN/x64/Release/` too.
 
-> **Note:** The game's LibTorch 2.13 loads models exported by the same or an older PyTorch, such as the one preinstalled on Colab, so `training/requirements.txt` only keeps PyTorch below 2.14, and the notebook's first cell warns about a newer one. Do not install another PyTorch on Colab: its CUDA libraries clash with Colab's own and cuDNN fails.
+> **Note:** `model.cpp` runs the notebook's `PolicyNet` layer by layer. It reads the numbers of channels and residual blocks from `model_ewn.bin`, but a change to the layers themselves needs the same change in `model.cpp`. On Colab, use the preinstalled PyTorch: another one's CUDA libraries clash with Colab's own and cuDNN fails.

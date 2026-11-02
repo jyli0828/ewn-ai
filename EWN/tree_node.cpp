@@ -1,46 +1,27 @@
 #include "tree_node.h"
+#include "model.h"
 
 Tree_node::Tree_node() {
 	this->win_count = 0;
 	this->visit_count = 0;
 	this->prob = 0;
+	this->model_chs_mask = 0;
 	this->game_status = 0;
 	this->parent_ptr = NULL;
 	for (int i = 0; i < 18; i++)
 		this->children_ptr_list[i] = NULL;
 }
 
-Tree_node::Tree_node(const Game& game_, int select) {
+Tree_node::Tree_node(const Game& game_) {
 	this->win_count = 0;
 	this->visit_count = 0;
 	this->prob = 0;
+	this->model_chs_mask = 0;
 	this->game_status = 0;
 	this->game = game_;
 	this->parent_ptr = NULL;
-	if (select) new_child_nodes_model();
-	else new_child_nodes();
-}
-
-Tree_node::Tree_node(const Tree_node& node) {
-	this->win_count = node.win_count;
-	this->visit_count = node.visit_count;
-	this->prob = node.prob;
-	this->game_status = node.game_status;
-	this->game = node.game;
-	this->parent_ptr = node.parent_ptr;
 	for (int i = 0; i < 18; i++)
-		this->children_ptr_list[i] = node.children_ptr_list[i];
-}
-
-void Tree_node::operator=(const Tree_node& node) {
-	this->win_count = node.win_count;
-	this->visit_count = node.visit_count;
-	this->prob = node.prob;
-	this->game_status = node.game_status;
-	this->game = node.game;
-	this->parent_ptr = node.parent_ptr;
-	for (int i = 0; i < 18; i++)
-		this->children_ptr_list[i] = node.children_ptr_list[i];
+		this->children_ptr_list[i] = NULL;
 }
 
 bool Tree_node::is_terminate() {
@@ -80,16 +61,23 @@ int Tree_node::new_child_nodes() {
 	return legal_child_num;
 }
 
-void Tree_node::update(int win_count_) {
-	this->visit_count++;
-	this->win_count += win_count_;
-	//cout << "  update : " << this->win_count << ", " << this->visit_count << endl;
+void Tree_node::set_children_probs() {
+	for (int m = 0; m < 2; m++) {
+		int chs_index = this->game.get_chess_index(this->game.movable_chs_list[m]);
+		if (this->model_chs_mask & (1 << chs_index)) continue;
+		this->model_chs_mask |= 1 << chs_index;
+
+		float probs[3];
+		model_probs(this->game, chs_index, probs);
+		for (int i = 0; i < 18 && this->children_ptr_list[i] != NULL; i++)
+			if (this->children_ptr_list[i]->chess_number == chs_index)
+				this->children_ptr_list[i]->prob = probs[this->children_ptr_list[i]->direct];
+	}
 }
 
 void Tree_node::update(int win_count_, int visit_count_) {
 	this->visit_count += visit_count_;
 	this->win_count += win_count_;
-	//cout << "  update : " << this->win_count << ", " << this->visit_count << endl;
 }
 
 int Tree_node::get_win_count() const {
@@ -114,53 +102,4 @@ Tree_node* Tree_node::get_parent_ptr() const {
 
 Tree_node* Tree_node::get_child_ptr(const int& child_index) const {
 	return this->children_ptr_list[child_index];
-}
-
-float Tree_node::get_ucb(Tree_node* cur_node, int i) {
-	Tree_node* node_ptr = cur_node->get_child_ptr(i);
-	float exploitation = (float)node_ptr->get_win_count() / ((float)node_ptr->get_visit_count()  /*+ this->eps*/);
-	float exploration = sqrt(2) * sqrt(log((float)cur_node->get_visit_count()) / ((float)node_ptr->get_visit_count() /*+ this->eps*/));
-	float ucb_val = exploitation + exploration;
-	return ucb_val;
-}
-
-void Tree_node::node_status() {
-	cout << "vvvvvvvvvvvvvvv NODE_STATUS vvvvvvvvvvvvvvv\n";
-	cout << "node : " << this << '\n';
-	this->game.print_board();
-	this->game.print_game_status();
-	printf("win_count: %d, visit: %d, status: %d\n", this->win_count, this->visit_count, this->game_status);
-
-	printf("check in board                  :");
-	for (int i = 0; i < 18; i++)
-		printf("%c ", this->game.check_in_board(Movement(i / 3, i % 3)) ? 'T' : 'F'); printf("\n");
-
-	printf("is exist                        :");
-	for (int i = 0; i < 18; i++)
-		printf("%c ", this->game.cur_chs_ptr[i / 3] != 0 ? 'T' : 'F'); printf("\n");
-	cout << "^^^^^^^^^^^^^^^ NODE_STATUS ^^^^^^^^^^^^^^^\n";
-}
-
-void Tree_node::print_tree(Tree_node* root_node_ptr, int max_level) {
-	int level_node_sum[20] = { 0 };
-	for (int i = 1; i <= max_level; i++)
-		print_level(root_node_ptr, i, level_node_sum, i);
-	for (int i = 1; i < 20; i++)
-		cout << level_node_sum[i] << " ";
-	cout << '\n';
-}
-
-void Tree_node::print_level(Tree_node* node, int level, int level_node_sum[20], int level_num) {
-	int child_num = 0;
-	for (int i = 0; i < 18; i++) {
-		if (node->children_ptr_list[i] == NULL) break;
-		child_num++;
-	}
-
-	if (level == 1)
-		level_node_sum[level_num]++;
-	else {
-		for (int i = 0; i < child_num; i++)
-			print_level(node->children_ptr_list[i], level - 1, level_node_sum, level_num);
-	}
 }

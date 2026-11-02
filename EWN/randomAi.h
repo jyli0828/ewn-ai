@@ -6,8 +6,6 @@
 
 class RandomAi {
 public:
-	bool ai_side;
-
 	Movement AI_move(Game& cur_game, int dice);
 };
 

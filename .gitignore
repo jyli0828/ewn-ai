@@ -2,10 +2,8 @@
 .vs/
 *.user
 
-# C++ build output: x64 builds go to x64/, Win32 builds to Debug/ and Release/
+# C++ build output (EWN/x64/<configuration>/ also gets copies of picture/ and the model)
 x64/
-[Dd]ebug/
-[Rr]elease/
 
 # Python and Jupyter
 __pycache__/
@@ -17,7 +15,7 @@ venv/
 training/game_logs/
 training/training_data.csv
 training/*.h5
-training/*.pt
+training/*.bin
 
 # Windows
 Thumbs.db

@@ -13,7 +13,6 @@ private:
 
 public:
 	EwnAI();
-	EwnAI(int mode);
 
 	Movement AI_move(Game& cur_game, int dice);
 	int get_ai_mode() const;

@@ -9,42 +9,27 @@ ChessPosition::ChessPosition() {
 	memset(this->chessRed, 0, sizeof(this->chessRed));
 	memset(this->chessBlue, 0, sizeof(this->chessBlue));
 	this->all = 0b1110011000100010001100111;
-	BitBoard tmp = 1;
-	for (int i = 0; i < 25; i++) {
-		this->fullMask[i] = tmp;
-		tmp = tmp << 1;
-	}
 }
 
-ChessPosition::ChessPosition(const ChessPosition& chesspos) {
-	for (int i = 0; i < 6; i++) {
-		this->chessRed[i] = chesspos.chessRed[i];
-		this->chessBlue[i] = chesspos.chessBlue[i];
-	}
-	this->all = chesspos.all;
+// mt19937 is a random generator based on Mersenne twister algorithm; each thread seeds its own once
+static mt19937& random_generator() {
+	thread_local mt19937 gen(random_device{}());
+	return gen;
 }
 
-void ChessPosition::operator=(const ChessPosition& chesspos) {
-	for (int i = 0; i < 6; i++) {
-		this->chessRed[i] = chesspos.chessRed[i];
-		this->chessBlue[i] = chesspos.chessBlue[i];
-	}
-	this->all = chesspos.all;
+int random_int(int n) {
+	uniform_int_distribution uni_dis(0, n - 1);
+	return uni_dis(random_generator());
 }
 
 Game::Game() {
-	ios_base::sync_with_stdio(0);
-	cin.tie(nullptr);
-
-	srand(time(NULL) + _getpid());
 	this->side = 0;
 
-	vector<int> chs_red{ 0, 1, 2, 3, 4, 5 };
-	vector<int> chs_blue{ 0, 1, 2, 3, 4, 5 };
-	// mt19937 is a random generator based on Mersenne twister algorithm
-	mt19937 gen(random_device{}());
-	
-	shuffle(chs_red.begin(), chs_red.end(), gen);
+	int chs_red[6] = { 0, 1, 2, 3, 4, 5 };
+	int chs_blue[6] = { 0, 1, 2, 3, 4, 5 };
+	mt19937& gen = random_generator();
+
+	shuffle(chs_red, chs_red + 6, gen);
 	this->chessPosition.chessRed[chs_red[0]] = this->chessPosition.fullMask[0];
 	this->chessPosition.chessRed[chs_red[1]] = this->chessPosition.fullMask[1];
 	this->chessPosition.chessRed[chs_red[2]] = this->chessPosition.fullMask[2];
@@ -52,7 +37,7 @@ Game::Game() {
 	this->chessPosition.chessRed[chs_red[4]] = this->chessPosition.fullMask[6];
 	this->chessPosition.chessRed[chs_red[5]] = this->chessPosition.fullMask[10];
 
-	shuffle(chs_blue.begin(), chs_blue.end(), gen);
+	shuffle(chs_blue, chs_blue + 6, gen);
 	this->chessPosition.chessBlue[chs_blue[0]] = this->chessPosition.fullMask[24];
 	this->chessPosition.chessBlue[chs_blue[1]] = this->chessPosition.fullMask[23];
 	this->chessPosition.chessBlue[chs_blue[2]] = this->chessPosition.fullMask[22];
@@ -82,9 +67,7 @@ void Game::operator=(const Game& game) {
 }
 
 int Game::roll_dice() {
-	mt19937 gen(random_device{}());
-	uniform_int_distribution uni_dis(0, 5);
-	return uni_dis(gen);
+	return random_int(6);
 }
 
 void Game::switch_player() {
@@ -128,10 +111,11 @@ int Game::get_chess_index(BitBoard chs) const {
 	for (int i = 0; i < 6; i++)
 		if (this->chessPosition.chessRed[i] == chs || this->chessPosition.chessBlue[i] == chs)
 			return i;
+	return -1;
 }
 
 int Game::update_game_status(const Movement& mvmt) {
-	BitBoard chs = this->cur_chs_ptr[mvmt.first], movemask;
+	BitBoard chs = this->cur_chs_ptr[mvmt.first], movemask = 0;
 	int direct = mvmt.second;
 
 	if (!this->side) {
@@ -145,33 +129,29 @@ int Game::update_game_status(const Movement& mvmt) {
 		else if (direct == 2) movemask = chs >> 6;		
 	}
 
-	for (int i = 0; i < 6; i++) {
-		if (this->chessPosition.chessRed[i] == movemask) this->chessPosition.chessRed[i] = 0;
-		if (this->chessPosition.chessBlue[i] == movemask) this->chessPosition.chessBlue[i] = 0;
+	// capture the chess on the destination, which may be one of the mover's own
+	if (this->chessPosition.all & movemask) {
+		for (int i = 0; i < 6; i++) {
+			if (this->chessPosition.chessRed[i] == movemask) this->chessPosition.chessRed[i] = 0;
+			if (this->chessPosition.chessBlue[i] == movemask) this->chessPosition.chessBlue[i] = 0;
+		}
 	}
 	this->chessPosition.all ^= chs;
 	this->chessPosition.all |= movemask;
 	this->cur_chs_ptr[mvmt.first] = movemask;
 
 	// return 0(game continues), 1(red wins), 2(blue wins)
-	// Check if any player arrives the end-game position
-	for (int i = 0; i < 6; i++) {
-		if (this->chessPosition.chessRed[i] & this->chessPosition.fullMask[24]) return 1;
-		if (this->chessPosition.chessBlue[i] & this->chessPosition.fullMask[0]) return 2;
-	}
-
-	// Check if the other player is killed the game.
-	bool BlueAllDie = true, RedAllDie = true;
-	for (int i = 0; i < 6; i++) {
-		if (this->chessPosition.chessRed[i] != 0) RedAllDie = false;
-		if (this->chessPosition.chessBlue[i] != 0) BlueAllDie = false;
-	}
-	if (BlueAllDie) return 1;
-	if (RedAllDie) return 2;
-	return 0;
+	// The game went on before this move, so only the moved chess can arrive at the end-game position,
+	// and only the other player can lose all its chess
+	int win = (!this->side) ? 1 : 2;
+	if (movemask == this->chessPosition.fullMask[(!this->side) ? 24 : 0]) return win;
+	const BitBoard* opponent = (!this->side) ? this->chessPosition.chessBlue : this->chessPosition.chessRed;
+	for (int i = 0; i < 6; i++)
+		if (opponent[i] != 0) return 0;
+	return win;
 }
 
-bool Game::check_in_board(const Movement& mvmt) {
+bool Game::check_in_board(const Movement& mvmt) const {
 	BitBoard chs = this->cur_chs_ptr[mvmt.first];
 	int direct = mvmt.second;
 
@@ -185,9 +165,10 @@ bool Game::check_in_board(const Movement& mvmt) {
 		else if (direct == 1) return ((chs & 0b0000000000000000000011111) == 0);
 		else if (direct == 2) return ((chs & 0b0000100001000010000111111) == 0);
 	}
+	return false;
 }
 
-bool Game::is_winning_move(const Movement& mvmt) {
+bool Game::is_winning_move(const Movement& mvmt) const {
 	BitBoard chs = this->cur_chs_ptr[mvmt.first], newplace = 0;
 	int direct = mvmt.second;
 
@@ -203,6 +184,17 @@ bool Game::is_winning_move(const Movement& mvmt) {
 	}
 	if (!this->side) return (newplace & this->chessPosition.fullMask[24]);
 	else return (newplace & this->chessPosition.fullMask[0]);
+}
+
+int Game::get_board_P(int i, int j) const {
+	BitBoard tmp = this->chessPosition.fullMask[i * 5 + j];
+	if (this->chessPosition.all & tmp) {
+		for (int k = 0; k < 6; k++) {
+			if (this->chessPosition.chessRed[k] & tmp) return k + 1;
+			if (this->chessPosition.chessBlue[k] & tmp) return k + 7;
+		}
+	}
+	return 0;
 }
 
 void Game::print_board() {
@@ -231,27 +223,4 @@ void Game::print_board() {
 	cout << "\n====================================" << endl;
 	GUI g;
 	g.rstboard(this->chessPosition);
-}
-
-void Game::print_movable(const int& dice) {
-	int num = this->count_movable_chs(dice);
-	for (int i = 0; i < num; i++)
-		for (int j = 0; j < 6; j++)
-			if (this->cur_chs_ptr[j] == this->movable_chs_list[i])
-				cout << j + 1 << ' ';
-	cout << '\n';
-}
-
-void Game::print_game_status() {
-	if (!this->side) cout << "red round\n";
-	else cout << "blue round\n";
-	cout << "all:" << (bitset<25>)this->chessPosition.all << '\n';
-	for (int i = 0; i < 6; i++)
-		cout << "blue" << i + 1 << ':' << (bitset<25>)this->chessPosition.chessBlue[i] << '\n';
-	for (int i = 0; i < 6; i++)
-		cout << "red" << i + 1 << ':' << (bitset<25>)this->chessPosition.chessRed[i] << '\n';
-	for (int i = 0; i < 6; i++)
-		cout << "cur" << i + 1 << ':' << (bitset<25>)this->cur_chs_ptr[i] << '\n';
-	cout << "movable1:" << (bitset<25>)this->movable_chs_list[0] << '\n';
-	cout << "movable2:" << (bitset<25>)this->movable_chs_list[1] << '\n';
 }

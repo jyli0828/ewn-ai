@@ -59,6 +59,9 @@
     <ClInclude Include="mcts.h">
       <Filter>標頭檔</Filter>
     </ClInclude>
+    <ClInclude Include="model.h">
+      <Filter>標頭檔</Filter>
+    </ClInclude>
     <ClInclude Include="play.h">
       <Filter>標頭檔</Filter>
     </ClInclude>

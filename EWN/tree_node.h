@@ -8,7 +8,10 @@ class Tree_node {
 public:
 	int win_count;
 	int visit_count;
+	// for model: the policy model's probability of the move to this node
 	float prob;
+	// for model: the chess (bit 0~5) whose children already have their probabilities
+	int model_chs_mask;
 
 	int chess_number;
 	int direct;
@@ -20,12 +23,8 @@ public:
 	Tree_node* children_ptr_list[18];
 
 	Tree_node();
-	// Constructor for expand
-	Tree_node(const Game& game_, int select);
-	// Copy Constructor
-	Tree_node(const Tree_node& node);
-	// Copy operator
-	void operator=(const Tree_node& node);
+	// Constructor for the root, which MCTS::run() expands
+	Tree_node(const Game& game_);
 
 	// If the node is a end-gamed node
 	bool is_terminate();
@@ -34,13 +33,10 @@ public:
 
 	// New legal child nodes and reset the values of the members(except children_ptr_list)
 	int new_child_nodes();
-	// for model
-	int new_child_nodes_model();
-
-	// for model
-	void set_fm_board();
-	// Update win_count and visit_count
-	void update(int win_count_);
+	// for model: give the children of the movable chess (game.movable_chs_list) the policy model's probabilities,
+	// the first time the dice lets them move; most nodes are never selected from, so the model skips them
+	void set_children_probs();
+	// Add the results of visit_count_ simulations
 	void update(int win_count_, int visit_count_);
 
 	int get_win_count() const;
@@ -50,12 +46,6 @@ public:
 	Tree_node* get_parent_ptr() const;
 	// Get child node pointer from children_ptr_list
 	Tree_node* get_child_ptr(const int& child_index) const;
-	float get_ucb(Tree_node* cur_node, int i);
-
-	// Debuging console
-	void node_status();
-	void print_tree(Tree_node* root_node_ptr, int max_level);
-	void print_level(Tree_node* node, int level, int level_node_sum[20], int level_num);
 };
 
 #endif

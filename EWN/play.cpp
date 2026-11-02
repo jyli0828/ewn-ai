@@ -1,12 +1,13 @@
 #include "play.h"
 #include "gui.h"
+#include <iomanip>
+#include <sstream>
 
-string roundn(string num, int n) {
-    int pt_pos = 0;
-    while (num[pt_pos] != '.')
-        pt_pos++;
-    pt_pos += n;
-    return num.substr(0, pt_pos + 1);
+// num rounded to n decimal places
+string roundn(double num, int n) {
+    ostringstream out;
+    out << fixed << setprecision(n) << num;
+    return out.str();
 }
 
 Movement Play::player_move(const int& dice) {
@@ -22,14 +23,14 @@ Movement Play::player_move(const int& dice) {
     g.movabledice_txt(this->game.side, movable_chs_index_list[0], movable_chs_index_list[1]);
         
     cout << "\nChoose: ";
-    chs_index = g.select_chs_index(this->game, dice) - 1;
+    chs_index = g.select_chs_index(this->game) - 1;
     if (!this->game.side)
         cout << "Direction: 0)Right 1)Down 2)Right-down\n";
     else
         cout << "Direction: 0)Left 1)Up 2)Left-up\n";
 
     cout << "Choose: ";
-    direct = g.select_chs_direction(this->game);
+    direct = g.select_chs_direction(this->game, chs_index);
 
     return Movement(chs_index, direct);
 }
@@ -58,7 +59,6 @@ void Play::two_players_mode() {
         if (!this->game.side) clock_p1 += (finish - start) / (double)(CLOCKS_PER_SEC);
         else clock_p2 += (finish - start) / (double)(CLOCKS_PER_SEC);
 
-        Sleep(500);
         // update: 0(game continues), 1(red wins), 2(blue wins)
         game_status = this->game.update_game_status(mvmt);
         this->game.print_board();
@@ -99,7 +99,8 @@ void Play::player_AI_mode() {
         g.clock_txt(0, clock_p1);
         g.clock_txt(1, clock_p2);
 
-        if (player_is_red && !this->game.side || !player_is_red && this->game.side) {
+        bool player_turn = player_is_red && !this->game.side || !player_is_red && this->game.side;
+        if (player_turn) {
             start = clock();
             mvmt = this->player_move(dice);
             finish = clock();
@@ -113,7 +114,8 @@ void Play::player_AI_mode() {
         if (!this->game.side) clock_p1 += (finish - start) / (double)(CLOCKS_PER_SEC);
         else clock_p2 += (finish - start) / (double)(CLOCKS_PER_SEC);
 
-        Sleep(500);
+        // pause on the AI's move so the player can see it; the player's own move shows at once
+        if (!player_turn) Sleep(500);
         // update: 0(game continues), 1(red wins), 2(blue wins)
         game_status = this->game.update_game_status(mvmt);
         this->game.print_board();
@@ -142,19 +144,23 @@ void Play::player_AI_mode() {
 }
 
 void Play::two_AIs_mode() {
-    int dice, game_status, mode;
+    int dice, game_status;
     double clock_p1 = 0, clock_p2 = 0;
     clock_t start, finish;
     Movement mvmt;
     EwnAI ewnAI1, ewnAI2;
     GUI g;
+    // indexed by EwnAI::get_ai_mode()
+    string ai_names[3] = { "MCTS", "Random", "Model" };
 
     // set round
     int round = 500, win_count = 0;
 
     for (int i = 1; i <= round; i++) {
         clock_p1 = 0, clock_p2 = 0;
-        cout << "Round " << i << '\n';
+        // the red side moves first in odd rounds and the blue side in even rounds
+        if (i % 2 == 0) this->game.switch_player();
+        cout << "Round " << i << ((i % 2) ? ", red" : ", blue") << " moves first\n";
         this->game.print_board();
 
         while (1) {
@@ -187,27 +193,17 @@ void Play::two_AIs_mode() {
 
                 string result;
                 if (game_status == 1) {
-                    mode = ewnAI1.get_ai_mode();
+                    result = ai_names[ewnAI1.get_ai_mode()] + "(red) is the winner!!!";
                     win_count++;
-
-                    if (mode == 0) result = "MCTS(red) is the winner!!!";
-                    else if (mode == 1) result = "Random(red) is the winner!!!";
-                    else result = "Model(red) is the winner!!!";
                 }
-                else {
-                    mode = ewnAI2.get_ai_mode();
-
-                    if (mode == 0) result = "MCTS(blue) is the winner!!!";
-                    else if (mode == 1) result = "Random(blue) is the winner!!!";
-                    else result = "Model(blue) is the winner!!!";
-                }
+                else result = ai_names[ewnAI2.get_ai_mode()] + "(blue) is the winner!!!";
 
                 cout << result << "\n";
                 cout << "====================================\n";
 
                 string win_rate = "The win rate of the red side: ";
                 win_rate += to_string(win_count) + " / " + to_string(i) + " = ";
-                win_rate += roundn(to_string((float)win_count / i * 100), 2) + "%";
+                win_rate += roundn((double)win_count / i * 100, 2) + "%";
                 cout << win_rate << '\n';
 
                 if (i == round) {
