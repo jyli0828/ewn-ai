@@ -9,26 +9,26 @@
 
 class GUI {
 private:
-	int states;
-
-	// Draw the options of a menu (option k is text_list[k] at (x, y_list[k]), width_list[k] x 50) and return
-	// the one clicked twice in a row; the option clicked last turns yellow
-	int choose_option(int x, const int y_list[], const int width_list[], const LPCTSTR text_list[], int n);
+	// Draw the options of a menu (option k is text_list[k] at (x, y_list[k])) and return the one clicked;
+	// the option under the mouse turns yellow
+	int choose_option(int x, const int y_list[], const LPCTSTR text_list[], int n);
 	// The white squares of the board and the line beside the information panel
 	void draw_squares();
 	void draw_pieces(const ChessPosition& chp);
+	// The board while the player chooses a move: the movable chess, the chosen chess (square chosen, -1 if
+	// none) and what a click on square hovered would pick: a movable chess, or with hovered_move the square
+	// the chosen chess would move to
+	void draw_choice(const Game& game, int chosen, int hovered, bool hovered_move);
 
 public:
-	GUI();
-
 	void init_environment();
 	int begin_gui();
 
 	int select_AI();
 	bool select_side();
-	// the chess in game.movable_chs_list, which count_movable_chs() sets
-	int select_chs_index(const Game& game);
-	int select_chs_direction(const Game& game, int chs_index);
+	// The player's move with a chess in game.movable_chs_list, which count_movable_chs() sets: a click on a
+	// movable chess chooses it (a second click takes it back), and a click on a square it can move to moves it
+	Movement select_move(const Game& game);
 
 	void draw_chess(int x, int y, char chess, int turn);
 	void draw_movable_cnt_color(const Game& game);
@@ -36,7 +36,6 @@ public:
 	void draw_selected_direction(bool side, int direct);
 
 	void rstboard(const ChessPosition& chp);
-	void rstboard_1(const Game& game);
 
 	void print_info();
 	void round_txt(int round);

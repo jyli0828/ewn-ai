@@ -25,36 +25,38 @@ static IMAGE& background() {
 	return img;
 }
 
-GUI::GUI() {
-	this->states = -1;
-}
-
 void GUI::init_environment() {
 	putimage(0, 0, &background());
 	this->draw_squares();
 	this->print_info();
 }
 
-int GUI::choose_option(int x, const int y_list[], const int width_list[], const LPCTSTR text_list[], int n) {
-	for (int k = 0; k < n; k++)
-		outtextxy(x, y_list[k], text_list[k]);
-
+int GUI::choose_option(int x, const int y_list[], const LPCTSTR text_list[], int n) {
 	ExMessage msg;
-	int selected = -1;
+	int hovered = -1;
+	// clicks made before the menu appeared do not choose
+	flushmessage(EX_MOUSE);
 	while (1) {
-		getmessage(&msg, EX_MOUSE);
-		if (msg.message != WM_LBUTTONDOWN) continue;
+		// each option over the background it covers, so a yellow one can turn black again
+		BeginBatchDraw();
 		for (int k = 0; k < n; k++) {
-			if (msg.x < x || msg.x > x + width_list[k] || msg.y < y_list[k] || msg.y > y_list[k] + 50) continue;
-			// the second click on the same option confirms it
-			if (k == selected) return k;
-
-			selected = k;
-			for (int m = 0; m < n; m++) {
-				settextcolor((m == k) ? YELLOW : BLACK);
-				outtextxy(x, y_list[m], text_list[m]);
-			}
+			putimage(x, y_list[k], textwidth(text_list[k]), textheight(text_list[k]), &background(), x, y_list[k]);
+			settextcolor((k == hovered) ? YELLOW : BLACK);
+			outtextxy(x, y_list[k], text_list[k]);
 		}
+		EndBatchDraw();
+
+		// wait until the mouse enters or leaves an option, or clicks one
+		int at;
+		do {
+			getmessage(&msg, EX_MOUSE);
+			at = -1;
+			for (int k = 0; k < n; k++)
+				if (msg.x >= x && msg.x < x + textwidth(text_list[k]) && msg.y >= y_list[k] && msg.y < y_list[k] + textheight(text_list[k]))
+					at = k;
+			if (msg.message == WM_LBUTTONDOWN && at >= 0) return at;
+		} while (at == hovered);
+		hovered = at;
 	}
 }
 
@@ -67,9 +69,9 @@ int GUI::begin_gui() {
 	outtextxy(200, 70, _T("Please choose a mode")); // 406 x 60
 
 	settextstyle(50, 0, _T("Berlin Sans FB"));
-	int y_list[3] = { 170, 250, 330 }, width_list[3] = { 350, 257, 187 };
+	int y_list[3] = { 170, 250, 330 };
 	LPCTSTR text_list[3] = { _T("0)Player vs. Player"), _T("1)AI vs. Player"), _T("2)AI vs. AI") };
-	int mode = this->choose_option(250, y_list, width_list, text_list, 3);
+	int mode = this->choose_option(250, y_list, text_list, 3);
 
 	if (mode == 0) cout << "Player vs. Player\n";
 	else if (mode == 1) cout << "AI vs. Player\n";
@@ -93,9 +95,9 @@ int GUI::select_AI() {
 
 	player = -player;
 	settextstyle(50, 0, _T("Berlin Sans FB"));
-	int y_list[3] = { 170, 250, 330 }, width_list[3] = { 149, 190, 152 };
+	int y_list[3] = { 170, 250, 330 };
 	LPCTSTR text_list[3] = { _T("0)MCTS"), _T("1)Random"), _T("2)Model") };
-	int ai = this->choose_option(150, y_list, width_list, text_list, 3);
+	int ai = this->choose_option(150, y_list, text_list, 3);
 
 	// 1 MCTS, 2 Random, 3 Model
 	if (first_player) playerA = ai + 1;
@@ -123,9 +125,9 @@ bool GUI::select_side() {
 	outtextxy(150, 70, _T("Please choose which side"));	// 449 x 60
 
 	settextstyle(50, 0, _T("Berlin Sans FB"));
-	int y_list[2] = { 200, 280 }, width_list[2] = { 318, 240 };
+	int y_list[2] = { 200, 280 };
 	LPCTSTR text_list[2] = { _T("The red side(first)"), _T("The blue side") };
-	player_is_red = (this->choose_option(280, y_list, width_list, text_list, 2) == 0);
+	player_is_red = (this->choose_option(280, y_list, text_list, 2) == 0);
 
 	if (player_is_red) cout << "Player is the red side(first)\n";
 	else cout << "Player is the blue side\n";
@@ -133,70 +135,52 @@ bool GUI::select_side() {
 	return player_is_red;
 }
 
-int GUI::select_chs_index(const Game& game) {
-	int chess, movable_chs_cnt = (game.movable_chs_list[0] == game.movable_chs_list[1]) ? 1 : 2;
-	int x, y, x_selected = -2, y_selected = -2;
-	BitBoard tmp;
-	ExMessage msg;
-	this->draw_movable_cnt_color(game);
-
-	while (1) {
-		getmessage(&msg, EX_MOUSE);
-		if (msg.message == WM_LBUTTONDOWN) {
-			this->rstboard_1(game);
-			this->draw_movable_cnt_color(game);
-
-			// the board starts at (10, 10); a click in that margin would round to row or column 0
-			x = (msg.x - 10) / 90, y = (msg.y - 10) / 90;
-			if (msg.x >= 10 && msg.y >= 10 && x < 5 && y < 5) {
-				tmp = game.chessPosition.fullMask[y * 5 + x];
-				if (game.chessPosition.all & tmp) {
-					chess = game.get_chess_index(tmp) + 1;
-					cout << chess << '\n';
-					this->draw_chess(x * 90 + 55, y * 90 + 55, chess + '0', -1);
-					this->states = y * 5 + x;
-
-					if (x == x_selected && y == y_selected) {
-						for (int i = 0; i < movable_chs_cnt; i++) {
-							if (tmp == game.movable_chs_list[i]) {
-								this->draw_selected_chess(chess);
-								return chess;
-							}
-						}
-					}
-				}
-			}
-			x_selected = x, y_selected = y;
-		}
-	}
-}
-
-int GUI::select_chs_direction(const Game& game, int chs_index) {
-	int dir[3] = { -1, -5, -6 }, state_dir;
-	int x, y, x_selected = -2, y_selected = -2;
+Movement GUI::select_move(const Game& game) {
+	int dir[3] = { -1, -5, -6 };
 	if (!game.side)
 		dir[0] = 1, dir[1] = 5, dir[2] = 6;
+	// the square of the chosen chess, and the square under the mouse that a click would act on; -1 if none
+	int chosen = -1, hovered = -1;
+	bool hovered_move = false;
 	ExMessage msg;
+	// clicks made while the other side was moving do not choose
+	flushmessage(EX_MOUSE);
+	this->draw_choice(game, chosen, hovered, hovered_move);
 
 	while (1) {
 		getmessage(&msg, EX_MOUSE);
-		if (msg.message == WM_LBUTTONDOWN) {
-			x = (msg.x - 10) / 90, y = (msg.y - 10) / 90;
-			if (msg.x >= 10 && msg.y >= 10 && x < 5 && y < 5) {
-				state_dir = y * 5 + x;
+		if (msg.message != WM_MOUSEMOVE && msg.message != WM_LBUTTONDOWN) continue;
 
-				if (x == x_selected && y == y_selected) {
-					for (int i = 0; i < 3; i++) {
-						// a move off the board edge would wrap to the next row, so check it too
-						if (state_dir == this->states + dir[i] && game.check_in_board(Movement(chs_index, i))) {
-							this->draw_selected_direction(game.side, i);
-							cout << i << '\n';
-							return i;
-						}
-					}
-				}
-			}
-			x_selected = x, y_selected = y;
+		// the board starts at (10, 10); a click in that margin would round to row or column 0
+		int x = (msg.x - 10) / 90, y = (msg.y - 10) / 90, sq = -1;
+		if (msg.x >= 10 && msg.y >= 10 && x < 5 && y < 5) sq = y * 5 + x;
+		// what a click on sq does: move the chosen chess there, or choose the movable chess on it
+		int chs_index = (chosen >= 0) ? game.get_chess_index(game.chessPosition.fullMask[chosen]) : -1, direct = -1;
+		bool movable = false;
+		if (sq >= 0) {
+			BitBoard tmp = game.chessPosition.fullMask[sq];
+			movable = (tmp == game.movable_chs_list[0] || tmp == game.movable_chs_list[1]);
+			for (int i = 0; i < 3 && chosen >= 0; i++)
+				// a move off the board edge would wrap to the next row, so check it too
+				if (sq == chosen + dir[i] && game.check_in_board(Movement(chs_index, i))) direct = i;
+		}
+
+		if (msg.message == WM_LBUTTONDOWN && direct >= 0) {
+			this->draw_selected_direction(game.side, direct);
+			cout << "move: (" << chs_index + 1 << ", " << direct << ")\n";
+			return Movement(chs_index, direct);
+		}
+		bool clicked = (msg.message == WM_LBUTTONDOWN && movable);
+		if (clicked) {
+			chosen = (sq == chosen) ? -1 : sq;
+			int chess = (chosen >= 0) ? game.get_chess_index(game.chessPosition.fullMask[chosen]) + 1 : 0;
+			this->draw_selected_chess(chess);
+			if (chess) cout << "chess " << chess << '\n';
+		}
+		int at = (direct >= 0 || movable) ? sq : -1;
+		if (clicked || at != hovered || (direct >= 0) != hovered_move) {
+			hovered = at, hovered_move = (direct >= 0);
+			this->draw_choice(game, chosen, hovered, hovered_move);
 		}
 	}
 }
@@ -240,7 +224,9 @@ void GUI::draw_selected_chess(int chess) {
 	settextcolor(BLACK);
 	setbkmode(TRANSPARENT);
 	settextstyle(35, 0, _T("Consolas"));
-	outtextxy(700 + 75, 30 + 157, chess + '0');
+	// over the background, which erases the chess chosen before; chess 0 only erases it
+	putimage(700 + 75, 30 + 157, textwidth(_T('0')), textheight(_T('0')), &background(), 700 + 75, 30 + 157);
+	if (chess > 0) outtextxy(700 + 75, 30 + 157, chess + '0');
 }
 
 void GUI::draw_selected_direction(bool side, int direct) {
@@ -292,10 +278,26 @@ void GUI::rstboard(const ChessPosition& chp) {
 	EndBatchDraw();
 }
 
-void GUI::rstboard_1(const Game& game) {
+void GUI::draw_choice(const Game& game, int chosen, int hovered, bool hovered_move) {
 	BeginBatchDraw();
 	this->draw_squares();
+	if (hovered_move) {
+		setfillcolor(RGB(255, 240, 140));
+		solidrectangle(hovered % 5 * 90 + 11, hovered / 5 * 90 + 11, hovered % 5 * 90 + 99, hovered / 5 * 90 + 99);
+	}
 	this->draw_pieces(game.chessPosition);
+	this->draw_movable_cnt_color(game);
+
+	// the chosen chess, and a movable one under the mouse, turn yellow
+	int yellow[2] = { chosen, hovered_move ? -1 : hovered };
+	for (int sq : yellow) {
+		if (sq < 0) continue;
+		setlinecolor(YELLOW);
+		setlinestyle(PS_SOLID, 6);
+		this->draw_chess(sq % 5 * 90 + 55, sq / 5 * 90 + 55, game.get_chess_index(game.chessPosition.fullMask[sq]) + '1', -1);
+		setlinestyle(PS_SOLID, 1);
+		setlinecolor(WHITE);
+	}
 	EndBatchDraw();
 }
 

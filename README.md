@@ -128,6 +128,8 @@ The side that moved first won 52.4% of the games, and 40.9% of all moves capture
 2. Install EasyX.
 3. Select the `Release | x64` configuration, then build and run. On launch, choose a game mode (Player vs. Player / Player vs. AI / AI vs. AI) and, if applicable, an AI strategy (MCTS / Random / Model).
 
+Menu options light up under the mouse, and one click picks one. On your turn, the pieces the die lets you move have a yellow ring: click one, then click the square to move it to, which lights up under the mouse. Clicking the chosen piece again lets you choose the other one.
+
 The build also copies `picture/` and `model_ewn.bin` into `EWN/x64/Release/`, so `EWN.exe` there runs on its own, e.g. by double-clicking it. The folder takes about 2 MB, most of it the model.
 
 ### Visual Studio Project Configuration

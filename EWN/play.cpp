@@ -11,7 +11,7 @@ string roundn(double num, int n) {
 }
 
 Movement Play::player_move(const int& dice) {
-    int movable_chs_cnt = this->game.count_movable_chs(dice), chs_index, direct;
+    int movable_chs_cnt = this->game.count_movable_chs(dice);
     int movable_chs_index_list[2] = { this->game.get_chess_index(this->game.movable_chs_list[0]), this->game.get_chess_index(this->game.movable_chs_list[1]) };
     GUI g;
 
@@ -21,18 +21,12 @@ Movement Play::player_move(const int& dice) {
         cout << movable_chs_index_list[i] + 1 << ' ';
     }
     g.movabledice_txt(this->game.side, movable_chs_index_list[0], movable_chs_index_list[1]);
-        
-    cout << "\nChoose: ";
-    chs_index = g.select_chs_index(this->game) - 1;
+
     if (!this->game.side)
-        cout << "Direction: 0)Right 1)Down 2)Right-down\n";
+        cout << "\nDirection: 0)Right 1)Down 2)Right-down\n";
     else
-        cout << "Direction: 0)Left 1)Up 2)Left-up\n";
-
-    cout << "Choose: ";
-    direct = g.select_chs_direction(this->game, chs_index);
-
-    return Movement(chs_index, direct);
+        cout << "\nDirection: 0)Left 1)Up 2)Left-up\n";
+    return g.select_move(this->game);
 }
 
 void Play::two_players_mode() {
