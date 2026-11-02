@@ -1,9 +1,11 @@
 #include "mcts.h"
 #include "gui.h"
 #include "model.h"
+#include <future>
 #include <thread>
 
 MCTS::MCTS() {
+	this->rollout_threads = 1;
 	this->selection_ptr = new UCT(eps);
 }
 
@@ -17,7 +19,7 @@ Movement MCTS::AI_move(Game& cur_game, int dice, int select) {
 
 	float best_val = -1e9;
 	int win = (!this->ai_side) ? 1 : 2, movable_chs_cnt = cur_game.count_movable_chs(dice), game_status;
-	int movable_chs_index_list[2] = { cur_game.get_chess_index(cur_game.movable_chs_list[0]), cur_game.get_chess_index(cur_game.movable_chs_list[1]) };
+	const int* movable_chs_index_list = cur_game.movable_chs_index_list;
 	bool end = false;
 	Movement answer;
 	GUI g;
@@ -55,8 +57,11 @@ Movement MCTS::AI_move(Game& cur_game, int dice, int select) {
 	}
 
 	if (!end) {
-		// search every move in its own thread; each run() has its own tree
+		// search every move in its own thread; each run() has its own tree, and the model is loaded before
+		// the threads start (EwnAI() has loaded it already in the game)
 		if (select) load_model();
+		// the cores that the moves leave idle simulate in each search too
+		this->rollout_threads = max(1, (int)thread::hardware_concurrency() / (int)mvmt_list.size());
 		vector<float> child_val_list(mvmt_list.size());
 		vector<thread> thread_list;
 		for (int k = 0; k < (int)mvmt_list.size(); k++)
@@ -111,24 +116,32 @@ float MCTS::run(const Game& cur_game, int select) {
 		}
 		else {
 			// 2. expand every legal move of the node
-			int legal_child_number = node_ptr->new_child_nodes();
+			int legal_child_number = node_ptr->new_child_nodes(), win_list[18] = { 0 }, visit = 100;
 
-			// 3. simulate 100 games from every child
-			for (int k = 0; k < legal_child_number; k++) {
-				int win = 0, visit = 100;
-				Tree_node* child_ptr = node_ptr->get_child_ptr(k);
-				// a child that ends the game needs no simulation
-				if (child_ptr->is_terminate())
-					win = (child_ptr->get_game_status() == ai_win) ? visit : 0;
-				else {
-					for (int l = 0; l < visit; l++)
-						win += this->simulation(child_ptr->game, select);
+			// 3. simulate 100 games from every child; thread t takes children t, t + threads, ...
+			int threads = min(this->rollout_threads, legal_child_number);
+			auto simulate = [&](int first) {
+				for (int k = first; k < legal_child_number; k += threads) {
+					Tree_node* child_ptr = node_ptr->get_child_ptr(k);
+					// a child that ends the game needs no simulation
+					if (child_ptr->is_terminate())
+						win_list[k] = (child_ptr->get_game_status() == ai_win) ? visit : 0;
+					else {
+						for (int l = 0; l < visit; l++)
+							win_list[k] += this->simulation(child_ptr->game, select);
+					}
 				}
+			};
+			vector<future<void>> helper_list;
+			for (int t = 1; t < threads; t++)
+				helper_list.push_back(async(launch::async, simulate, t));
+			simulate(0);
+			for (future<void>& helper : helper_list) helper.get();
 
-				// 4. back propagation
-				for (; child_ptr != NULL; child_ptr = child_ptr->get_parent_ptr())
-					child_ptr->update(win, visit);
-			}
+			// 4. back propagation
+			for (int k = 0; k < legal_child_number; k++)
+				for (Tree_node* child_ptr = node_ptr->get_child_ptr(k); child_ptr != NULL; child_ptr = child_ptr->get_parent_ptr())
+					child_ptr->update(win_list[k], visit);
 		}
 	}
 
@@ -147,7 +160,7 @@ int MCTS::simulation(const Game& cur_game, int select) {
 		// roll the dice and find all available moves (2 chess at most, 3 directions)
 		int movable_chs_cnt = simu_game.count_movable_chs(simu_game.roll_dice());
 		for (int i = 0; i < movable_chs_cnt; i++) {
-			int chs_index = simu_game.get_chess_index(simu_game.movable_chs_list[i]);
+			int chs_index = simu_game.movable_chs_index_list[i];
 			for (int direct = 0; direct < 3; direct++) {
 				Movement tmp_mvmt(chs_index, direct);
 				if (!simu_game.check_in_board(tmp_mvmt)) continue;

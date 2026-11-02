@@ -1,14 +1,14 @@
 {
-  "exported": "2026-11-02",
-  "torch": "2.11",
-  "games": 58127,
-  "train_moves": 821449,
-  "test_moves": 149254,
+  "exported": "2026-11-02 11:17 UTC",
+  "torch": "2.11.0+cu130",
+  "games": 57714,
+  "train_moves": 818470,
+  "test_moves": 148375,
   "epochs": 20,
   "batch_size": 1024,
   "loser_weight": 0.5,
   "best_epoch": 18,
-  "test_loss": 0.525682,
-  "test_accuracy": 0.7653,
-  "baseline_accuracy": 0.5735
+  "test_loss": 0.525649,
+  "test_accuracy": 0.7661,
+  "baseline_accuracy": 0.5734
 }

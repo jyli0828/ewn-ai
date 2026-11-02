@@ -22,8 +22,7 @@ public:
 	// List for legal child nodes
 	Tree_node* children_ptr_list[18];
 
-	Tree_node();
-	// Constructor for the root, which MCTS::run() expands
+	// A node of game_ without children
 	Tree_node(const Game& game_);
 
 	// If the node is a end-gamed node
@@ -33,7 +32,7 @@ public:
 
 	// New legal child nodes and reset the values of the members(except children_ptr_list)
 	int new_child_nodes();
-	// for model: give the children of the movable chess (game.movable_chs_list) the policy model's probabilities,
+	// for model: give the children of the movable chess (game.movable_chs_index_list) the policy model's probabilities,
 	// the first time the dice lets them move; most nodes are never selected from, so the model skips them
 	void set_children_probs();
 	// Add the results of visit_count_ simulations

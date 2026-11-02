@@ -5,6 +5,15 @@
 #define ANSI_COLOR_BLUE    "\x1b[34m"
 #define ANSI_COLOR_RESET   "\x1b[0m"
 
+// how far a move shifts the chess's bit in each direction (0 horizontal, 1 vertical, 2 diagonal): left for red,
+// right for blue
+static const int dir_shift[3] = { 1, 5, 6 };
+// the squares that a red (0) or blue (1) chess cannot leave in each direction, as the move would leave the board
+static const BitBoard edge_mask[2][3] = {
+	{ 0b1000010000100001000010000, 0b1111100000000000000000000, 0b1111110000100001000010000 },
+	{ 0b0000100001000010000100001, 0b0000000000000000000011111, 0b0000100001000010000111111 }
+};
+
 ChessPosition::ChessPosition() {
 	memset(this->chessRed, 0, sizeof(this->chessRed));
 	memset(this->chessBlue, 0, sizeof(this->chessBlue));
@@ -46,23 +55,20 @@ Game::Game() {
 	this->chessPosition.chessBlue[chs_blue[5]] = this->chessPosition.fullMask[14];
 
 	for (int i = 0; i < 2; i++)
-		this->movable_chs_list[i] = 0;
+		this->movable_chs_index_list[i] = 0;
 	this->cur_chs_ptr = this->chessPosition.chessRed;
 }
 
 Game::Game(const Game& game) {
-	this->side = game.side;
-	this->chessPosition = game.chessPosition;
-	for (int i = 0; i < 2; i++)
-		this->movable_chs_list[i] = game.movable_chs_list[i];
-	this->cur_chs_ptr = (!this->side) ? this->chessPosition.chessRed : this->chessPosition.chessBlue;
+	*this = game;
 }
 
 void Game::operator=(const Game& game) {
 	this->side = game.side;
 	this->chessPosition = game.chessPosition;
 	for (int i = 0; i < 2; i++)
-		this->movable_chs_list[i] = game.movable_chs_list[i];
+		this->movable_chs_index_list[i] = game.movable_chs_index_list[i];
+	// point at this game's own chess
 	this->cur_chs_ptr = (!this->side) ? this->chessPosition.chessRed : this->chessPosition.chessBlue;
 }
 
@@ -76,35 +82,18 @@ void Game::switch_player() {
 }
 
 int Game::count_movable_chs(const int& dice) {
-	for (int i = 0; i < 2; i++)
-		this->movable_chs_list[i] = 0;
-	if (this->cur_chs_ptr[dice] != 0) {
-		for (int i = 0; i < 2; i++)
-			this->movable_chs_list[i] = this->cur_chs_ptr[dice];
-		return 1;
-	}
-	else {
-		int movable_chs_cnt = 2;
-		for (int i = dice - 1; i >= 0; i--) {
-			if (this->cur_chs_ptr[i] != 0) {
-				this->movable_chs_list[0] = this->cur_chs_ptr[i];
-				break;
-			}
-		}
-		for (int i = dice + 1; i < 6; i++) {
-			if (this->cur_chs_ptr[i] != 0) {
-				this->movable_chs_list[1] = this->cur_chs_ptr[i];
-				break;
-			}
-		}
-		for (int i = 0; i < 2; i++) {
-			if (this->movable_chs_list[i] == 0) {
-				this->movable_chs_list[i] = this->movable_chs_list[1 - i];
-				movable_chs_cnt--;
-			}
-		}
-		return movable_chs_cnt;
-	}
+	// the chess of the dice, or the nearest lower and higher ones if it was captured
+	int lower = dice, higher = dice;
+	while (lower >= 0 && this->cur_chs_ptr[lower] == 0) lower--;
+	while (higher < 6 && this->cur_chs_ptr[higher] == 0) higher++;
+	if (lower < 0) lower = higher;
+	if (higher > 5) higher = lower;
+	// no chess left, which ends the game before this side rolls
+	if (lower > 5) return 0;
+
+	this->movable_chs_index_list[0] = lower;
+	this->movable_chs_index_list[1] = higher;
+	return (lower == higher) ? 1 : 2;
 }
 
 int Game::get_chess_index(BitBoard chs) const {
@@ -114,20 +103,13 @@ int Game::get_chess_index(BitBoard chs) const {
 	return -1;
 }
 
-int Game::update_game_status(const Movement& mvmt) {
-	BitBoard chs = this->cur_chs_ptr[mvmt.first], movemask = 0;
-	int direct = mvmt.second;
+BitBoard Game::destination(const Movement& mvmt) const {
+	BitBoard chs = this->cur_chs_ptr[mvmt.first];
+	return (!this->side) ? chs << dir_shift[mvmt.second] : chs >> dir_shift[mvmt.second];
+}
 
-	if (!this->side) {
-		if (direct == 0) movemask = chs << 1;
-		else if (direct == 1) movemask = chs << 5;
-		else if (direct == 2) movemask = chs << 6;
-	}
-	else {
-		if (direct == 0) movemask = chs >> 1;
-		else if (direct == 1) movemask = chs >> 5;
-		else if (direct == 2) movemask = chs >> 6;		
-	}
+int Game::update_game_status(const Movement& mvmt) {
+	BitBoard chs = this->cur_chs_ptr[mvmt.first], movemask = this->destination(mvmt);
 
 	// capture the chess on the destination, which may be one of the mover's own
 	if (this->chessPosition.all & movemask) {
@@ -152,38 +134,11 @@ int Game::update_game_status(const Movement& mvmt) {
 }
 
 bool Game::check_in_board(const Movement& mvmt) const {
-	BitBoard chs = this->cur_chs_ptr[mvmt.first];
-	int direct = mvmt.second;
-
-	if (!this->side) {
-		if (direct == 0) return ((chs & 0b1000010000100001000010000) == 0);
-		else if (direct == 1) return ((chs & 0b1111100000000000000000000) == 0);
-		else if (direct == 2) return ((chs & 0b1111110000100001000010000) == 0);
-	}
-	else {
-		if (direct == 0) return ((chs & 0b0000100001000010000100001) == 0);
-		else if (direct == 1) return ((chs & 0b0000000000000000000011111) == 0);
-		else if (direct == 2) return ((chs & 0b0000100001000010000111111) == 0);
-	}
-	return false;
+	return (this->cur_chs_ptr[mvmt.first] & edge_mask[this->side][mvmt.second]) == 0;
 }
 
 bool Game::is_winning_move(const Movement& mvmt) const {
-	BitBoard chs = this->cur_chs_ptr[mvmt.first], newplace = 0;
-	int direct = mvmt.second;
-
-	if (!this->side) {
-		if (direct == 0) newplace = chs << 1;
-		else if (direct == 1) newplace = chs << 5;
-		else if (direct == 2) newplace = chs << 6;
-	}
-	else {
-		if (direct == 0) newplace = chs >> 1;
-		else if (direct == 1) newplace = chs >> 5;
-		else if (direct == 2) newplace = chs >> 6;
-	}
-	if (!this->side) return (newplace & this->chessPosition.fullMask[24]);
-	else return (newplace & this->chessPosition.fullMask[0]);
+	return this->destination(mvmt) == this->chessPosition.fullMask[(!this->side) ? 24 : 0];
 }
 
 int Game::get_board_P(int i, int j) const {

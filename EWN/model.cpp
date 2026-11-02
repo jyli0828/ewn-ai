@@ -22,9 +22,24 @@ static vector<Conv> block_convs;
 static vector<float> fc_weight, fc_bias;
 static bool model_loaded = false, use_avx2 = false;
 
+// A float16 as a float32
+static float half_to_float(uint16_t h) {
+	uint32_t sign = (uint32_t)(h & 0x8000) << 16, exponent = (h >> 10) & 0x1f, mantissa = h & 0x3ff;
+	// zero or subnormal: mantissa * 2^-24
+	if (exponent == 0) return (sign ? -1.0f : 1.0f) * mantissa * (1.0f / 16777216);
+	uint32_t bits = sign | ((exponent == 31) ? 0xff : exponent + 112) << 23 | mantissa << 13;
+	float f;
+	memcpy(&f, &bits, sizeof(f));
+	return f;
+}
+
+// n values stored as float16
 static bool read_floats(ifstream& in, vector<float>& v, size_t n) {
+	vector<uint16_t> half(n);
+	if (!in.read((char*)half.data(), n * sizeof(uint16_t))) return false;
 	v.resize(n);
-	return (bool)in.read((char*)v.data(), n * sizeof(float));
+	for (size_t i = 0; i < n; i++) v[i] = half_to_float(half[i]);
+	return true;
 }
 
 // a k x k convolution, stored as PyTorch's weight[out][in][dy][dx] and then the bias
@@ -40,13 +55,13 @@ static bool read_conv(ifstream& in, Conv& conv, int in_ch, int out_ch, int k) {
 	return true;
 }
 
-// The file of export_weights() in the notebook: "EWN1", the numbers of input channels, channels and residual
-// blocks, then the float32 weights and biases of every layer in order
+// The file of export_weights() in the notebook: "EWN2", the numbers of input channels, channels and residual
+// blocks, then the float16 weights and biases of every layer in order
 static bool read_model(const char* path) {
 	ifstream in(path, ios::binary);
 	char magic[4];
 	int header[3];
-	if (!in.read(magic, 4) || memcmp(magic, "EWN1", 4) != 0 || !in.read((char*)header, sizeof(header))) return false;
+	if (!in.read(magic, 4) || memcmp(magic, "EWN2", 4) != 0 || !in.read((char*)header, sizeof(header))) return false;
 	int in_ch = header[0], channels = header[1], blocks = header[2];
 	// the convolutions work on 16 output channels at a time
 	if (in_ch != 16 || channels <= 0 || channels > 256 || channels % 16 != 0 || blocks < 0 || blocks > 64) return false;
@@ -153,7 +168,8 @@ void dice_chs_pos(const int chs_pos[13], int range, int d, int movable[2]) {
 	movable[1] = (higher <= 6 && higher != lower) ? chs_pos[higher + range] : -1;
 }
 
-void board_to_FM(const Game& game, int dice, int prev_board[16][5][5]) {
+// The feature maps of the board for the chess to move: 1~6 is red and 7~12 blue, and it must be on the board
+void board_to_FM(const Game& game, int chess, int prev_board[16][5][5]) {
 	memset(prev_board, 0, sizeof(int) * 16 * 5 * 5);
 	// square (i * 5 + j) of each chess 1~12; -1 if it was captured
 	int chs_pos[13];
@@ -171,11 +187,8 @@ void board_to_FM(const Game& game, int dice, int prev_board[16][5][5]) {
 		}
 	}
 
-	// channel 12: the chess of the dice, or the nearest lower and higher ones if it was captured
-	int dice_range = (dice <= 6) ? 0 : 6, dice_movable[2];
-	dice_chs_pos(chs_pos, dice_range, dice - dice_range, dice_movable);
-	for (int m = 0; m < 2; m++)
-		if (dice_movable[m] >= 0) prev_board[12][dice_movable[m] / 5][dice_movable[m] % 5] = 1;
+	// channel 12: the chess to move
+	prev_board[12][chs_pos[chess] / 5][chs_pos[chess] % 5] = 1;
 
 	// channel 14: how many dice faces let each chess move
 	for (int range = 0; range <= 6; range += 6) {
@@ -188,7 +201,7 @@ void board_to_FM(const Game& game, int dice, int prev_board[16][5][5]) {
 	}
 
 	// channel 15: how many dice faces let the opponent move a chess onto each square next turn
-	int opponent = (dice <= 6) ? 6 : 0, step = (dice <= 6) ? -1 : 1;
+	int opponent = (chess <= 6) ? 6 : 0, step = (chess <= 6) ? -1 : 1;
 	for (int d = 1; d <= 6; d++) {
 		int movable[2];
 		bool reach[25] = { false };

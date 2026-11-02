@@ -18,8 +18,8 @@ int UCT::select_children_list_index(Tree_node* cur_node, int dice, bool ai_side,
 
 		Tree_node* node_ptr = cur_node->get_child_ptr(i);
 		// only the chess the dice allows can move
-		BitBoard chs = cur_node->game.cur_chs_ptr[node_ptr->chess_number];
-		movable_list[i] = (chs == cur_node->game.movable_chs_list[0] || chs == cur_node->game.movable_chs_list[1]);
+		int chs = node_ptr->chess_number;
+		movable_list[i] = (chs == cur_node->game.movable_chs_index_list[0] || chs == cur_node->game.movable_chs_index_list[1]);
 		if (!movable_list[i]) continue;
 
 		float win_rate = (float)node_ptr->get_win_count() / (float)node_ptr->get_visit_count();

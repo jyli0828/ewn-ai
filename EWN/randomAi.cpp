@@ -4,7 +4,7 @@
 Movement RandomAi::AI_move(Game& cur_game, int dice) {
     Movement available_mvmt_list[6];
     int available_mvmt_cnt = 0, next_move_cnt = cur_game.count_movable_chs(dice);
-    int movable_chs_index_list[2] = { cur_game.get_chess_index(cur_game.movable_chs_list[0]), cur_game.get_chess_index(cur_game.movable_chs_list[1]) };
+    const int* movable_chs_index_list = cur_game.movable_chs_index_list;
     GUI g;
 
     g.draw_movable_cnt_color(cur_game);

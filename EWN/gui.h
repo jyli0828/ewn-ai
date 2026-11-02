@@ -7,6 +7,9 @@
 #define WIDTH 900
 #define HEIGHT 470
 
+// The players of playerA and playerB: 0 player, 1 MCTS, 2 Random, 3 Model (EwnAI::get_ai_mode() + 1)
+extern const string player_names[4];
+
 class GUI {
 private:
 	// Draw the options of a menu (option k is text_list[k] at (x, y_list[k])) and return the one clicked;
@@ -26,7 +29,7 @@ public:
 
 	int select_AI();
 	bool select_side();
-	// The player's move with a chess in game.movable_chs_list, which count_movable_chs() sets: a click on a
+	// The player's move with a chess in game.movable_chs_index_list, which count_movable_chs() sets: a click on a
 	// movable chess chooses it (a second click takes it back), and a click on a square it can move to moves it
 	Movement select_move(const Game& game);
 

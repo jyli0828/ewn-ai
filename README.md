@@ -51,7 +51,7 @@ EWN-AI/
 
 ### Search
 
-`MCTS::AI_move()` in `mcts.cpp` runs a separate search of 100 iterations for every legal move the rolled die allows, one thread per move, and plays the move whose search gives the highest win rate. The search tree holds the moves of every piece, so each step down the tree rolls a die to decide which of them may move, and the side to move picks the child with the best UCT value from its own point of view (`uct.cpp`). Each new node is then scored by 100 random games that also roll the die every turn.
+`MCTS::AI_move()` in `mcts.cpp` runs a separate search of 100 iterations for every legal move the rolled die allows, one thread per move, and plays the move whose search gives the highest win rate. The search tree holds the moves of every piece, so each step down the tree rolls a die to decide which of them may move, and the side to move picks the child with the best UCT value from its own point of view (`uct.cpp`). Each new node's children are then scored by 100 random games each, which also roll the die every turn, spread over the CPU cores that the threads per move leave idle.
 
 ### Board encoding
 
@@ -68,7 +68,7 @@ Each position is encoded as a 16×5×5 feature map, built the same way by `board
 
 ### Policy model
 
-For the marked piece, the model outputs a probability for each direction (horizontal, vertical, diagonal). `training/train_policy.ipynb` trains a small residual network (6 residual blocks of 64 channels) and exports its weights to `model_ewn.bin`, with every batch norm folded into the convolution before it. `model.cpp` runs the network on the CPU without any deep learning library, using AVX2 when the CPU has it, and gives illegal directions a probability of 0. The shipped `EWN/model_ewn.bin` was trained this way on 58,127 games, from an earlier parse of the logs below that missed 231 games: it picks the direction the human player chose for 76.5% of its test moves, against 57.4% for always picking the most common legal direction. `EWN/model_ewn.json` records how it was trained.
+For the marked piece, the model outputs a probability for each direction (horizontal, vertical, diagonal). `training/train_policy.ipynb` trains a small residual network (6 residual blocks of 64 channels) and exports its weights to `model_ewn.bin`, with every batch norm folded into the convolution before it. They are stored as float16, half the size of float32 with the same test accuracy. `model.cpp` runs the network on the CPU without any deep learning library, using AVX2 when the CPU has it, and gives illegal directions a probability of 0. The shipped `EWN/model_ewn.bin` was trained this way on the data below: it picks the direction the human player chose for 76.6% of the test moves, against 57.3% for always picking the most common of its legal directions (those that keep it on the board): diagonal whenever all three are legal, see the direction shares below. `EWN/model_ewn.json` records how it was trained.
 
 ### Guided search
 
@@ -76,7 +76,7 @@ In `Model` mode, the first time the die lets a piece move from a node, that piec
 
 ### Training data
 
-`scrape_littlegolem.py` downloads the match records of the top 10 players in [LittleGolem](https://www.littlegolem.net/)'s EinStein ranking, and `parse_game_logs.py` turns them into one CSV line per game (initial setups, move list, result), dropping duplicates. The last game of a match takes the match's result, also when a player resigned it. The notebook then turns each game into board states to train the policy network.
+`scrape_littlegolem.py` downloads the match records of the top 10 players in [LittleGolem](https://www.littlegolem.net/)'s EinStein ranking, and `parse_game_logs.py` turns them into one CSV line per game (initial setups, move list, result), dropping duplicates. Only games decided on the board are kept, where a piece reached the opponent's corner or one side lost all its pieces: the result of a game that a resignation or a time out ended says little about its moves. The notebook then turns each game into board states to train the policy network.
 
 The current training data was downloaded on 2026-11-02 from these players' finished matches:
 
@@ -97,24 +97,31 @@ A match between two listed players counts for both above. Overall, the data has 
 
 | | Count |
 |---|---:|
-| Matches, each counted once (338 matches without any moves are skipped) | 7,260 |
-| Games, after removing the 3,768 that appear in two players' logs | 58,358 |
-| Moves, i.e. training samples | 973,197 |
-| Training / test moves, split by game | 824,562 / 148,635 |
-| Moves per game | 16.7 on average, 1 to 32 |
+| Matches with at least one game decided on the board, each counted once (791 others have none) | 6,807 |
+| Games, after removing the 3,745 that appear in two players' logs | 57,714 |
+| Moves, i.e. training samples | 966,845 |
+| Training / test moves, split by game | 818,470 / 148,375 |
+| Moves per game | 16.8 on average, 5 to 32 |
 
 | How the game was won | Games | Share |
 |---|---:|---:|
-| A piece reached the opponent's home corner | 53,540 | 91.7% |
+| A piece reached the opponent's home corner | 53,540 | 92.8% |
 | All of the opponent's pieces were captured | 4,174 | 7.2% |
-| Neither: the opponent resigned or ran out of time | 644 | 1.1% |
+
+| Direction of a move | Moves | Share |
+|---|---:|---:|
+| Horizontal | 235,334 | 24.3% |
+| Vertical | 236,548 | 24.5% |
+| Diagonal | 494,963 | 51.2% |
+
+In 6.1% of the moves the piece stands on the far row or column, so only the direction along that edge is legal. When all three directions are legal, players move diagonally 54.5% of the time.
 
 | | Blue | Red |
 |---|---:|---:|
-| Games won | 29,248 (50.1%) | 29,110 (49.9%) |
-| Games started | 32,600 (55.9%) | 25,758 (44.1%) |
+| Games won | 28,944 (50.2%) | 28,770 (49.8%) |
+| Games started | 32,207 (55.8%) | 25,507 (44.2%) |
 
-The side that moved first won 52.4% of the games, and 40.9% of all moves capture a piece.
+The side that moved first won 52.5% of the games, and 40.9% of all moves capture a piece.
 
 ## Requirements
 
@@ -130,7 +137,7 @@ The side that moved first won 52.4% of the games, and 40.9% of all moves capture
 
 Menu options light up under the mouse, and one click picks one. On your turn, the pieces the die lets you move have a yellow ring: click one, then click the square to move it to, which lights up under the mouse. Clicking the chosen piece again lets you choose the other one.
 
-The build also copies `picture/` and `model_ewn.bin` into `EWN/x64/Release/`, so `EWN.exe` there runs on its own, e.g. by double-clicking it. The folder takes about 2 MB, most of it the model.
+The build also copies `picture/` and `model_ewn.bin` into `EWN/x64/Release/`, so `EWN.exe` there runs on its own, e.g. by double-clicking it. Those three take about 1.1 MB, most of it the model; `EWN.pdb` beside them only holds debugging information.
 
 ### Visual Studio Project Configuration
 

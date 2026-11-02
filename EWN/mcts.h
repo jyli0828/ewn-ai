@@ -10,6 +10,9 @@ class MCTS {
 public:
     bool ai_side;
     int max_iterations;
+    // how many threads each run() simulates the children of a new node with; AI_move() shares the cores
+    // among its searches, and it is 1 until then
+    int rollout_threads;
     Selection* selection_ptr;
 
     MCTS();

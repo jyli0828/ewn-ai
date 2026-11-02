@@ -40,7 +40,8 @@ class Game {
 public:
     bool side; // 0 is red, 1 is blue
     ChessPosition chessPosition;
-    BitBoard movable_chs_list[2];
+    // the indices (0~5) of the chess that count_movable_chs() lets move; the same index twice if only one can
+    int movable_chs_index_list[2];
     BitBoard* cur_chs_ptr;
 
     Game();
@@ -52,6 +53,8 @@ public:
     int count_movable_chs(const int& dice);
     // return the index (0~5) of the chess on chs, or -1 if no chess is there
     int get_chess_index(BitBoard chs) const;
+    // the square (bit) that the chess of the side to move reaches with mvmt
+    BitBoard destination(const Movement& mvmt) const;
     // return 0(game continues), 1(red wins), 2(blue wins)
     int update_game_status(const Movement& mvmt);
     bool check_in_board(const Movement& mvmt) const;

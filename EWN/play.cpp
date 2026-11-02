@@ -12,7 +12,7 @@ string roundn(double num, int n) {
 
 Movement Play::player_move(const int& dice) {
     int movable_chs_cnt = this->game.count_movable_chs(dice);
-    int movable_chs_index_list[2] = { this->game.get_chess_index(this->game.movable_chs_list[0]), this->game.get_chess_index(this->game.movable_chs_list[1]) };
+    const int* movable_chs_index_list = this->game.movable_chs_index_list;
     GUI g;
 
     cout << "\nNext chessman able to move: ";
@@ -144,8 +144,6 @@ void Play::two_AIs_mode() {
     Movement mvmt;
     EwnAI ewnAI1, ewnAI2;
     GUI g;
-    // indexed by EwnAI::get_ai_mode()
-    string ai_names[3] = { "MCTS", "Random", "Model" };
 
     // set round
     int round = 500, win_count = 0;
@@ -187,10 +185,10 @@ void Play::two_AIs_mode() {
 
                 string result;
                 if (game_status == 1) {
-                    result = ai_names[ewnAI1.get_ai_mode()] + "(red) is the winner!!!";
+                    result = player_names[ewnAI1.get_ai_mode() + 1] + "(red) is the winner!!!";
                     win_count++;
                 }
-                else result = ai_names[ewnAI2.get_ai_mode()] + "(blue) is the winner!!!";
+                else result = player_names[ewnAI2.get_ai_mode() + 1] + "(blue) is the winner!!!";
 
                 cout << result << "\n";
                 cout << "====================================\n";

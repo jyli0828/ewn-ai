@@ -1,8 +1,10 @@
 #include "gui.h"
 
 int player = 1;
+// indices of player_names
 int playerA = 0, playerB = 0;
 bool player_is_red = false;
+const string player_names[4] = { "player", "MCTS", "Random", "Model" };
 
 // N is the size of buf; a longer string is cut instead of overflowing it
 template <size_t N>
@@ -99,20 +101,9 @@ int GUI::select_AI() {
 	LPCTSTR text_list[3] = { _T("0)MCTS"), _T("1)Random"), _T("2)Model") };
 	int ai = this->choose_option(150, y_list, text_list, 3);
 
-	// 1 MCTS, 2 Random, 3 Model
 	if (first_player) playerA = ai + 1;
 	else playerB = ai + 1;
-	if (playerA) {
-		if (playerA == 1) cout << "MCTS";
-		else if (playerA == 2) cout << "Random";
-		else cout << "Model";
-	}
-	if (playerB) {
-		if (playerB == 1) cout << " MCTS\n";
-		else if (playerB == 2) cout << " Random\n";
-		else cout << " Model\n";
-	}
-	cout << '\n';
+	cout << "Player " << (first_player ? 1 : 2) << ": " << player_names[ai + 1] << "\n\n";
 	return ai;
 }
 
@@ -136,9 +127,6 @@ bool GUI::select_side() {
 }
 
 Movement GUI::select_move(const Game& game) {
-	int dir[3] = { -1, -5, -6 };
-	if (!game.side)
-		dir[0] = 1, dir[1] = 5, dir[2] = 6;
 	// the square of the chosen chess, and the square under the mouse that a click would act on; -1 if none
 	int chosen = -1, hovered = -1;
 	bool hovered_move = false;
@@ -159,10 +147,11 @@ Movement GUI::select_move(const Game& game) {
 		bool movable = false;
 		if (sq >= 0) {
 			BitBoard tmp = game.chessPosition.fullMask[sq];
-			movable = (tmp == game.movable_chs_list[0] || tmp == game.movable_chs_list[1]);
+			for (int m = 0; m < 2; m++)
+				movable = movable || tmp == game.cur_chs_ptr[game.movable_chs_index_list[m]];
 			for (int i = 0; i < 3 && chosen >= 0; i++)
-				// a move off the board edge would wrap to the next row, so check it too
-				if (sq == chosen + dir[i] && game.check_in_board(Movement(chs_index, i))) direct = i;
+				// a move off the board edge would wrap to the next row, so check it first
+				if (game.check_in_board(Movement(chs_index, i)) && game.destination(Movement(chs_index, i)) == tmp) direct = i;
 		}
 
 		if (msg.message == WM_LBUTTONDOWN && direct >= 0) {
@@ -202,11 +191,11 @@ void GUI::draw_chess(int x, int y, char chess, int turn) {
 }
 
 void GUI::draw_movable_cnt_color(const Game& game) {
-	int movable_chs_cnt = (game.movable_chs_list[0] == game.movable_chs_list[1]) ? 1 : 2;
+	int movable_chs_cnt = (game.movable_chs_index_list[0] == game.movable_chs_index_list[1]) ? 1 : 2;
 
 	for (int i = 0; i < movable_chs_cnt; i++) {
-		BitBoard tmp = game.movable_chs_list[i];
-		char c = game.get_chess_index(tmp) + '1';
+		BitBoard tmp = game.cur_chs_ptr[game.movable_chs_index_list[i]];
+		char c = game.movable_chs_index_list[i] + '1';
 
 		for (int sq = 0; sq < 25; sq++) {
 			if (tmp != game.chessPosition.fullMask[sq]) continue;
@@ -317,26 +306,9 @@ void GUI::print_info() {
 	int tmpX = 700, tmpY = 10;
 	outtextxy(tmpX + 60, tmpY + 20, _T("Time cost"));
 
-	string red = "The red side: ", blue = "The blue side: ";
-
-	if (player_is_red) {
-		red += "player";
-		if (playerA == 0) blue += "player";
-		else if (playerA == 1) blue += "MCTS";
-		else if (playerA == 2) blue += "Random";
-		else if (playerA == 3) blue += "Model";
-	}
-	else {
-		if (playerA == 0) red += "player";
-		else if (playerA == 1) red += "MCTS";
-		else if (playerA == 2) red += "Random";
-		else if (playerA == 3) red += "Model";
-
-		if (playerB == 0) blue += "player";
-		else if (playerB == 1) blue += "MCTS";
-		else if (playerB == 2) blue += "Random";
-		else if (playerB == 3) blue += "Model";
-	}
+	// a player on the red side plays against playerA; otherwise playerA is red and playerB blue
+	string red = "The red side: " + player_names[player_is_red ? 0 : playerA];
+	string blue = "The blue side: " + player_names[player_is_red ? playerA : playerB];
 
 	TCHAR buf1[25], buf2[25];
 	string2tchar(buf1, red);

@@ -1,24 +1,15 @@
 #include "tree_node.h"
 #include "model.h"
 
-Tree_node::Tree_node() {
+// game is copied rather than made by Game(), which would draw a random setup first
+Tree_node::Tree_node(const Game& game_) : game(game_) {
 	this->win_count = 0;
 	this->visit_count = 0;
 	this->prob = 0;
 	this->model_chs_mask = 0;
+	this->chess_number = 0;
+	this->direct = 0;
 	this->game_status = 0;
-	this->parent_ptr = NULL;
-	for (int i = 0; i < 18; i++)
-		this->children_ptr_list[i] = NULL;
-}
-
-Tree_node::Tree_node(const Game& game_) {
-	this->win_count = 0;
-	this->visit_count = 0;
-	this->prob = 0;
-	this->model_chs_mask = 0;
-	this->game_status = 0;
-	this->game = game_;
 	this->parent_ptr = NULL;
 	for (int i = 0; i < 18; i++)
 		this->children_ptr_list[i] = NULL;
@@ -42,28 +33,21 @@ int Tree_node::new_child_nodes() {
 		Movement movement(chs_index, direction);
 		if (!this->game.check_in_board(movement)) continue;
 
-		// new legal child nodes
-		this->children_ptr_list[legal_child_num] = new Tree_node();
-		this->children_ptr_list[legal_child_num]->chess_number = chs_index;
-		this->children_ptr_list[legal_child_num]->direct = direction;
-		Tree_node* node_ptr = this->children_ptr_list[legal_child_num];
-		legal_child_num++;
-
-		// reset the values of the members
-		node_ptr->game = this->game;
+		// new legal child nodes, after this node's game and the move
+		Tree_node* node_ptr = new Tree_node(this->game);
+		this->children_ptr_list[legal_child_num++] = node_ptr;
+		node_ptr->chess_number = chs_index;
+		node_ptr->direct = direction;
 		node_ptr->game_status = node_ptr->game.update_game_status(movement);
 		node_ptr->game.switch_player();
 		node_ptr->parent_ptr = this;
 	}
-	// reset the rest of the children_ptr to NULL
-	for (int i = legal_child_num; i < 18; i++)
-		this->children_ptr_list[i] = NULL;
 	return legal_child_num;
 }
 
 void Tree_node::set_children_probs() {
 	for (int m = 0; m < 2; m++) {
-		int chs_index = this->game.get_chess_index(this->game.movable_chs_list[m]);
+		int chs_index = this->game.movable_chs_index_list[m];
 		if (this->model_chs_mask & (1 << chs_index)) continue;
 		this->model_chs_mask |= 1 << chs_index;
 
