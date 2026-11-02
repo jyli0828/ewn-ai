@@ -51,16 +51,32 @@ Tensor d_exist(int dice, int side, Tensor prev_board) {
 	return board;
 }
 
+// The squares of the chess that one side (range 0 is red, 6 is blue) can move with dice d, as in
+// Game::count_movable_chs(): the chess of the dice, or the nearest lower and higher ones if it was captured.
+// Unused entries are -1.
+void dice_chs_pos(const int chs_pos[13], int range, int d, int movable[2]) {
+	int lower = d, higher = d;
+	while (lower >= 1 && chs_pos[lower + range] < 0) lower--;
+	while (higher <= 6 && chs_pos[higher + range] < 0) higher++;
+	movable[0] = (lower >= 1) ? chs_pos[lower + range] : -1;
+	movable[1] = (higher <= 6 && higher != lower) ? chs_pos[higher + range] : -1;
+}
+
 Tensor board_to_FM(Tree_node* t, int dice) {
 	Tensor prev_board = torch::zeros({ 16, 5, 5 }, torch::kInt);
 	bool dice_exist = false;
+	// square (i * 5 + j) of each chess 1~12; -1 if it was captured
+	int chs_pos[13];
+	for (int k = 0; k < 13; k++) chs_pos[k] = -1;
 
 	for (int i = 0; i < 5; i++) {
 		for (int j = 0; j < 5; j++) {
 			int k = t->game.get_board_FM(i, j);
 	
-			if (k > 0) prev_board[k - 1][i][j] = 1;
-			else prev_board[15][i][j] = 1;
+			if (k > 0) {
+				prev_board[k - 1][i][j] = 1;
+				chs_pos[k] = i * 5 + j;
+			}
 
 			if (k == dice && dice_exist == false) {
 				prev_board[12][i][j] = 1;
@@ -73,6 +89,36 @@ Tensor board_to_FM(Tree_node* t, int dice) {
 	if (!dice_exist) {
 		prev_board[12] += d_exist(dice, 1, prev_board);
 		prev_board[12] += d_exist(dice, -1, prev_board);
+	}
+
+	// channel 14: how many dice faces let each chess move
+	for (int range = 0; range <= 6; range += 6) {
+		for (int d = 1; d <= 6; d++) {
+			int movable[2];
+			dice_chs_pos(chs_pos, range, d, movable);
+			for (int m = 0; m < 2; m++)
+				if (movable[m] >= 0) prev_board[14][movable[m] / 5][movable[m] % 5] += 1;
+		}
+	}
+
+	// channel 15: how many dice faces let the opponent move a chess onto each square next turn
+	int opponent = (dice <= 6) ? 6 : 0, step = (dice <= 6) ? -1 : 1;
+	for (int d = 1; d <= 6; d++) {
+		int movable[2];
+		bool reach[25] = { false };
+		dice_chs_pos(chs_pos, opponent, d, movable);
+		for (int m = 0; m < 2; m++) {
+			if (movable[m] < 0) continue;
+			// horizontal, vertical and diagonal moves of the opponent
+			int i = movable[m] / 5, j = movable[m] % 5;
+			int di[3] = { 0, step, step }, dj[3] = { step, 0, step };
+			for (int k = 0; k < 3; k++) {
+				int ni = i + di[k], nj = j + dj[k];
+				if (ni >= 0 && ni < 5 && nj >= 0 && nj < 5) reach[ni * 5 + nj] = true;
+			}
+		}
+		for (int sq = 0; sq < 25; sq++)
+			if (reach[sq]) prev_board[15][sq / 5][sq % 5] += 1;
 	}
 	return prev_board;
 }

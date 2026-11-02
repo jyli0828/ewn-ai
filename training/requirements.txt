@@ -1,0 +1,6 @@
+# Not newer than the game's LibTorch 2.13, so EWN/model.cpp can load the exported model
+torch<2.14
+numpy
+h5py
+matplotlib
+jupyter
