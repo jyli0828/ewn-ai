@@ -114,7 +114,8 @@ def match_ids(player_id, delay):
 
 
 def is_played(record):
-    # A match with moves: 5 header lines and a line of moves, as parse_game_logs.py reads them
+    # A record that parse_game_logs.py reads: 5 header lines and the line of moves, which may hold no game
+    # when a player resigned at once
     lines = record.splitlines()
     return len(lines) == 6 and lines[5].startswith('1. ')
 

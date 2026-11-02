@@ -16,6 +16,7 @@ training/game_logs/
 training/training_data.csv
 training/*.h5
 training/*.bin
+training/model_ewn.json
 
 # Windows
 Thumbs.db
